@@ -1,0 +1,25 @@
+.env
+banking_env/
+*.pyc
+docker/*
+!docker/dags/
+.vscode/
+.idea/
+.DS_Store
+!docker/dags/**
+__pycache__*/
+docker-compose.override.yml
+logs/
+
+# GitHub Actions cache
+/.github/.cache
+
+# DBT cache
+banking_dbt/.dbt/
+banking_dbt/analyses/
+banking_dbt/logs/
+banking_dbt/macros/
+banking_dbt/seeds/
+banking_dbt/target/
+banking_dbt/tests/
+
