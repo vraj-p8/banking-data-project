@@ -15,3 +15,7 @@ pandas
 
 # dbt
 dbt-snowflake
+
+# fastapi server
+fastapi
+uvicorn[standard]

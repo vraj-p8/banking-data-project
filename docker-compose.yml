@@ -68,11 +68,27 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_NOTIFY_WEBHOOK_ENABLE_minio: "on"
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_minio: "http://event-receiver:9002/minio/events"
+      MINIO_NOTIFY_WEBHOOK_QUEUE_DIR: "/tmp/minio/queue"
+      MINIO_NOTIFY_WEBHOOK_QUEUE_LIMIT: "10000"
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - ./docker/minio/data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    volumes:
+      - ./docker/minio/init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
     
   airflow-webserver:
     build:
@@ -83,9 +99,11 @@ services:
     depends_on:
       - airflow-scheduler
       - airflow-postgres
+      - airflow-init
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/${AIRFLOW_DB_NAME}
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
     volumes:
       - ./docker/dags:/opt/airflow/dags
       - ./docker/logs:/opt/airflow/logs
@@ -104,9 +122,11 @@ services:
     restart: always
     depends_on:
       - airflow-postgres
+      - airflow-init
     environment:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/${AIRFLOW_DB_NAME}
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth
     volumes:
       - ./docker/dags:/opt/airflow/dags
       - ./docker/logs:/opt/airflow/logs
@@ -127,6 +147,38 @@ services:
       - airflow_postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"  # separate from banking-postgres to avoid conflict
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: dockerfile-airflow.dockerfile
+    depends_on:
+      - airflow-postgres
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/${AIRFLOW_DB_NAME}
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD}
+      - AIRFLOW_EMAIL=${AIRFLOW_EMAIL}
+    command: >
+      bash -c "airflow db migrate &&
+      airflow users create --role Admin --username ${AIRFLOW_USERNAME} --password ${AIRFLOW_PASSWORD} --firstname Airflow --lastname Admin --email ${AIRFLOW_EMAIL} || true"
+
+  event-receiver:
+    build:
+      context: .
+      dockerfile: dockerfile-fastapi.dockerfile
+    container_name: minio-event-receiver
+    restart: always
+    depends_on:
+      - airflow-webserver
+    environment:
+      - AIRFLOW_API_URL=http://airflow-webserver:8080/api/v1
+      - AIRFLOW_DAG_ID=minio_to_snowflake_banking
+      - AIRFLOW_USERNAME=${AIRFLOW_USERNAME}
+      - AIRFLOW_PASSWORD=${AIRFLOW_PASSWORD}
+    ports:
+      - "9002:9002"
 
 volumes:
   airflow_postgres_data:

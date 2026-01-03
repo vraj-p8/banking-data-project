@@ -70,5 +70,6 @@ jobs:
       - name: dbt compile (validation)
         run: |
           cd banking_dbt
+          dbt clean
           dbt deps
           dbt compile

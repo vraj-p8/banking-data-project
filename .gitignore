@@ -3,10 +3,12 @@ banking_env/
 *.pyc
 docker/*
 !docker/dags/
+!docker/minio/
 .vscode/
 .idea/
 .DS_Store
 !docker/dags/**
+docker/minio/data/
 __pycache__*/
 docker-compose.override.yml
 logs/
@@ -22,4 +24,3 @@ banking_dbt/macros/
 banking_dbt/seeds/
 banking_dbt/target/
 banking_dbt/tests/
-
